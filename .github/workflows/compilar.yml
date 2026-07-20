@@ -1,0 +1,75 @@
+name: Compilar BD_Tecnica
+
+on:
+  schedule:
+    - cron: "0 * * * *"        # de hora em hora. Ajuste a frequencia se quiser.
+  workflow_dispatch: {}        # botao manual na aba Actions
+
+permissions:
+  contents: read
+  issues: write                # pra abrir/comentar issue de falha
+
+# Evita 2 runs simultaneos (cron + manual) escrevendo no mesmo destino.
+concurrency:
+  group: compilar-bd-tecnica
+  cancel-in-progress: false
+
+jobs:
+  compilar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install deps
+        run: npm ci || npm install
+
+      - name: Testes unitarios
+        run: npm test
+
+      - name: Compilar .xlsx no destino
+        run: npm start
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          # Forca IPv4: mitiga ERR_STREAM_PREMATURE_CLOSE do undici no fetch do token sob Node 22.
+          NODE_OPTIONS: --dns-result-order=ipv4first
+
+  notify:
+    needs: compilar
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const label = "compilar-bd-tecnica-falha";
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const { owner, repo } = context.repo;
+            const open = await github.rest.issues.listForRepo({ owner, repo, state: "open", labels: label });
+            const body = `A compilacao da BD_Tecnica falhou no run ${context.runId}.\n\nLog: ${url}\n\nO destino pode estar desatualizado ate o proximo run dar certo.`;
+            if (open.data.length) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: open.data[0].number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title: "Compilador BD_Tecnica falhando", body, labels: [label] });
+            }
+
+  recover:
+    needs: compilar
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const label = "compilar-bd-tecnica-falha";
+            const { owner, repo } = context.repo;
+            const open = await github.rest.issues.listForRepo({ owner, repo, state: "open", labels: label });
+            const url = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            for (const issue of open.data) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body: `Compilacao voltou a dar certo no run ${context.runId}. Fechando.\n\nLog: ${url}` });
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: "closed" });
+            }

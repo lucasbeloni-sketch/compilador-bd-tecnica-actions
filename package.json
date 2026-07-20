@@ -1,0 +1,15 @@
+{
+  "name": "compilador-bd-tecnica-actions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Le todos os .xlsx de uma pasta do Drive (Shared Drive), normaliza o cabecalho conforme a referencia D5:DK5 da aba BD_Tecnica do destino, junta tudo, deduplica por TRABALHO mantendo o arquivo mais recente (data no nome) e cola a partir de D6.",
+  "scripts": {
+    "start": "node src/compilar.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "googleapis": "^144.0.0",
+    "xlsx": "^0.18.5"
+  }
+}

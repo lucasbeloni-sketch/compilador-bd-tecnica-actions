@@ -1,0 +1,208 @@
+const fs = require("fs");
+const path = require("path");
+const { google } = require("googleapis");
+const XLSX = require("xlsx");
+const { getAuthClient, withRetry } = require("../lib/google");
+const { listXlsxInFolder, downloadFile } = require("../lib/drive");
+const {
+  normHeader,
+  parseFileDate,
+  buildColumnMap,
+  reorderRow,
+  compile,
+  padToWidth,
+  cellToValue,
+} = require("./transform");
+
+// Drive leitura + Sheets escrita.
+const SCOPES = [
+  "https://www.googleapis.com/auth/drive.readonly",
+  "https://www.googleapis.com/auth/spreadsheets",
+];
+
+function loadConfig() {
+  const raw = fs.readFileSync(path.join(__dirname, "..", "config.json"), "utf8");
+  return JSON.parse(raw);
+}
+
+// Le um .xlsx (Buffer) -> { header:[], rows:[[...]] } usando a 1a planilha.
+// raw:true + cellDates:true devolve os valores CRUS: numero fica numero (Sheets guarda
+// como numero), data vira Date. cellToValue normaliza Date -> "dd/mm/aaaa" (pt-BR), pra
+// USER_ENTERED parsear certo. (raw:false traria "46,569.21" / "2/25/26" formato US, que
+// numa planilha pt-BR viram TEXTO quebrado.)
+function readXlsx(buf, headerRow1Based) {
+  const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
+  const sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  if (!ws) return { header: [], rows: [] };
+  const matrix = XLSX.utils.sheet_to_json(ws, {
+    header: 1,
+    raw: true,
+    defval: "",
+    blankrows: false,
+  });
+  const hIdx = Math.max(0, (headerRow1Based || 1) - 1);
+  const header = (matrix[hIdx] || []).map((h) => String(h ?? ""));
+  const rows = matrix.slice(hIdx + 1).map((row) => row.map(cellToValue));
+  return { header, rows };
+}
+
+async function main() {
+  const cfg = loadConfig();
+  const dryRun = process.env.DRY_RUN === "1" || process.argv.includes("--dry-run");
+
+  const authClient = await getAuthClient(SCOPES);
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+  const drive = google.drive({ version: "v3", auth: authClient });
+
+  // 1) Cabecalho de referencia (nomes + ordem alvo) lido do proprio destino.
+  const refResp = await withRetry(
+    () =>
+      sheets.spreadsheets.values.get({
+        spreadsheetId: cfg.destSpreadsheetId,
+        range: `'${cfg.destSheet.replace(/'/g, "''")}'!${cfg.headerRefRange}`,
+        valueRenderOption: "UNFORMATTED_VALUE",
+        dateTimeRenderOption: "FORMATTED_STRING",
+      }),
+    { label: "get-header-ref" }
+  );
+  const refHeader = (refResp.data.values && refResp.data.values[0]) || [];
+  if (!refHeader.length)
+    throw new Error(`Cabecalho de referencia vazio em ${cfg.destSheet}!${cfg.headerRefRange}.`);
+  const width = refHeader.length;
+  const keyIndex = refHeader.findIndex((h) => normHeader(h) === normHeader(cfg.keyColumn));
+  if (keyIndex < 0)
+    throw new Error(
+      `Coluna chave "${cfg.keyColumn}" nao achada no cabecalho de referencia (${cfg.headerRefRange}).`
+    );
+  console.log(`[ref] ${width} coluna(s); chave "${cfg.keyColumn}" no indice ${keyIndex}.`);
+
+  // 2) Lista os .xlsx da pasta no Drive.
+  const files = await listXlsxInFolder(drive, cfg.driveFolderId);
+  const xlsxFiles = files.filter((f) =>
+    f.name.toLowerCase().endsWith((cfg.fileExtension || ".xlsx").toLowerCase())
+  );
+  if (!xlsxFiles.length)
+    throw new Error(
+      `Nenhum ${cfg.fileExtension} na pasta ${cfg.driveFolderId}. ` +
+        `Confira o ID e se a Service Account tem acesso ao Shared Drive.`
+    );
+  console.log(`[drive] ${xlsxFiles.length} arquivo(s) ${cfg.fileExtension}:`);
+
+  // 3) Baixa, le, valida cabecalho e reordena cada arquivo.
+  const prepared = [];
+  const skipped = [];
+  for (const f of xlsxFiles) {
+    const date = parseFileDate(f.name);
+    if (date === null) {
+      skipped.push(`${f.name} -> sem data no nome (nao da pra ordenar por recencia)`);
+      console.warn(`  [PULA] ${f.name}: sem data no nome.`);
+      continue;
+    }
+    const buf = await downloadFile(drive, f.id);
+    const { header, rows } = readXlsx(buf, cfg.sourceHeaderRow);
+    const { indices, missing } = buildColumnMap(refHeader, header);
+    // Faltar a coluna chave (TRABALHO) inviabiliza o dedup -> sempre pula.
+    const keyMissing = missing.some((m) => normHeader(m) === normHeader(cfg.keyColumn));
+    const maxMissing = Number(cfg.maxMissingCols) || 0;
+    if (keyMissing || missing.length > maxMissing) {
+      const why = keyMissing
+        ? `falta a coluna chave "${cfg.keyColumn}"`
+        : `faltam ${missing.length} coluna(s) (> maxMissingCols=${maxMissing})`;
+      skipped.push(`${f.name} -> ${why}: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? "..." : ""}`);
+      console.warn(`  [PULA] ${f.name}: ${why}.`);
+      continue;
+    }
+    if (missing.length) {
+      console.warn(`  [AVISO] ${f.name}: ${missing.length} coluna(s) faltando, entram VAZIAS: ${missing.join(", ")}`);
+    }
+    const reordered = rows.map((r) => reorderRow(r, indices));
+    prepared.push({ date, name: f.name, rows: reordered });
+    console.log(`  [OK]   ${f.name} (${date}): ${reordered.length} linha(s).`);
+  }
+
+  if (skipped.length) {
+    console.warn(`[aviso] ${skipped.length} arquivo(s) pulado(s):`);
+    skipped.forEach((s) => console.warn(`  - ${s}`));
+  }
+  if (!prepared.length)
+    throw new Error("Nenhum arquivo valido pra compilar (todos pulados). Abortando sem escrever.");
+
+  // 4) Compila + deduplica por TRABALHO (vence o arquivo mais recente).
+  const { rows: compiled, totalRead, uniqueKeys, emptyKeyRows } = compile(prepared, keyIndex);
+  const rect = padToWidth(compiled, width);
+  console.log(
+    `[compila] ${totalRead} linha(s) lidas -> ${rect.length} final ` +
+      `(${uniqueKeys} TRABALHO unico${emptyKeyRows ? ` + ${emptyKeyRows} sem TRABALHO` : ""}).`
+  );
+
+  // Guarda anti-apagao.
+  const minRows = Number(cfg.minRows) || 0;
+  if (rect.length < minRows)
+    throw new Error(
+      `So ${rect.length} linha(s), abaixo de minRows=${minRows}. Abortando SEM limpar o destino.`
+    );
+
+  if (dryRun) {
+    console.log("[dry-run] nao escreve. Amostra (1a linha):");
+    console.log(JSON.stringify(rect[0] || [], null, 0).slice(0, 800));
+    return;
+  }
+
+  // 5) Limpa o destino e escreve.
+  const destA1 = `'${cfg.destSheet.replace(/'/g, "''")}'!`;
+  await withRetry(
+    () =>
+      sheets.spreadsheets.values.clear({
+        spreadsheetId: cfg.destSpreadsheetId,
+        range: `${destA1}${cfg.destClearRange}`,
+      }),
+    { label: "clear-dest" }
+  );
+  console.log(`[destino] limpo ${cfg.destClearRange}`);
+
+  await withRetry(
+    () =>
+      sheets.spreadsheets.values.update({
+        spreadsheetId: cfg.destSpreadsheetId,
+        range: `${destA1}${cfg.destStartCell}`,
+        valueInputOption: cfg.valueInputOption,
+        requestBody: { values: rect },
+      }),
+    { label: "write-dest" }
+  );
+  console.log(`[destino] ${rect.length} linha(s) x ${width} col a partir de ${cfg.destStartCell}.`);
+
+  // 6) Carimbo opcional.
+  if (cfg.stampCell) {
+    const stamp = new Intl.DateTimeFormat("pt-BR", {
+      timeZone: cfg.timezone || "America/Sao_Paulo",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(new Date());
+    await withRetry(
+      () =>
+        sheets.spreadsheets.values.update({
+          spreadsheetId: cfg.destSpreadsheetId,
+          range: `${destA1}${cfg.stampCell}`,
+          valueInputOption: cfg.valueInputOption,
+          requestBody: { values: [[stamp]] },
+        }),
+      { label: "write-stamp" }
+    );
+    console.log(`[destino] carimbo ${cfg.stampCell}: ${stamp}`);
+  }
+
+  console.log("OK.");
+}
+
+main().catch((err) => {
+  console.error("FALHOU:", err.message);
+  if (err.response?.data) console.error(JSON.stringify(err.response.data, null, 2));
+  process.exit(1);
+});

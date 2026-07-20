@@ -1,0 +1,36 @@
+{
+  "_doc": "Compila todos os .xlsx da pasta driveFolderId (Shared Drive) na aba destSheet do destino. Reordena cada arquivo conforme a referencia headerRefRange (lida do proprio destino), deduplica por keyColumn (TRABALHO) mantendo o arquivo MAIS RECENTE (data no nome do arquivo) e cola a partir de destStartCell.",
+
+  "driveFolderId": "1FhiHfhVK5lH7LAzbtYmMm85FKWBNoxLt",
+  "_drivePath": "G:\\Drives compartilhados\\PCP\\Time CCM - CE\\Carteira\\Tecnica (so referencia humana; o robo le via Drive API).",
+  "fileExtension": ".xlsx",
+
+  "destSpreadsheetId": "1YtcYEFgrxVW59xG-H57gV25hWpZtROwnabZgVNrPnz0",
+  "destSheet": "BD_Tecnica",
+
+  "_headerRefRange": "Cabecalho de referencia (nomes das colunas, na ordem alvo). Lido do proprio destino. D5:DK5 = 112 colunas.",
+  "headerRefRange": "D5:DK5",
+
+  "_sourceHeaderRow": "Linha do cabecalho dentro de cada .xlsx (1-based). A1:DH1 => 1. Os dados comecam na linha seguinte.",
+  "sourceHeaderRow": 1,
+
+  "destStartCell": "D6",
+  "destClearRange": "D6:DK",
+
+  "_keyColumn": "Nome (do cabecalho de referencia) da coluna chave de dedup. Match case-insensitive e sem espacos duplicados.",
+  "keyColumn": "TRABALHO",
+
+  "_maxMissingCols": "Tolerancia a colunas da referencia ausentes no arquivo: ate esse tanto de colunas faltando, o arquivo AINDA e compilado (as faltantes entram VAZIAS) e loga aviso. Acima disso, pula o arquivo (assume base errada/quebrada). A coluna chave (keyColumn) faltando SEMPRE pula, independente disso.",
+  "maxMissingCols": 3,
+
+  "_minRows": "Guarda anti-apagao: se o total compilado for MENOR que isso, aborta SEM limpar o destino (assume leitura anomala / pasta vazia). 0 desliga a guarda.",
+  "minRows": 1,
+
+  "_stampCell": "Celula pra carimbo de ultima atualizacao. Deixe '' pra desligar. Garanta que esteja FORA de destClearRange.",
+  "stampCell": "",
+
+  "_render": "USER_ENTERED faz o Sheets reinterpretar datas/numeros ao escrever (igual digitar na celula).",
+  "valueInputOption": "USER_ENTERED",
+
+  "timezone": "America/Sao_Paulo"
+}
