@@ -26,8 +26,8 @@
   "_minRows": "Guarda anti-apagao: se o total compilado for MENOR que isso, aborta SEM limpar o destino (assume leitura anomala / pasta vazia). 0 desliga a guarda.",
   "minRows": 1,
 
-  "_stampCell": "Celula pra carimbo de ultima atualizacao. Deixe '' pra desligar. Garanta que esteja FORA de destClearRange.",
-  "stampCell": "",
+  "_stampCell": "Celula pra carimbo de ultima atualizacao (data/hora do fim da execucao, fuso timezone). Deixe '' pra desligar. Garanta que esteja FORA de destClearRange/statusClearRange.",
+  "stampCell": "F3",
 
   "_status": "Colunas derivadas de status do cadastro, FORA do espelho D:DK. ATIVO = SIM se o TRABALHO consta no arquivo mais recente (snapshot completo), senao NAO (saiu do cadastro). ULTIMA_BASE = data (dd/mm/aaaa) do ultimo arquivo onde o TRABALHO apareceu. Deixe statusEnabled=false pra desligar. Alinhadas 1:1 com as linhas de D6.",
   "statusEnabled": true,
