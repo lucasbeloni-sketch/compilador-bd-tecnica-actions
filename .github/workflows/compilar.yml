@@ -2,7 +2,7 @@ name: Compilar BD_Tecnica
 
 on:
   schedule:
-    - cron: "0 0,12 * * *"     # a cada 12h (00:00 e 12:00 UTC = 21h e 09h BRT). Cron do Actions e sempre UTC.
+    - cron: "0 11,23 * * *"    # 08h e 20h BRT (11:00 e 23:00 UTC). Cron do Actions e sempre UTC, nao segue horario de verao.
   workflow_dispatch: {}        # botao manual na aba Actions
 
 permissions:
