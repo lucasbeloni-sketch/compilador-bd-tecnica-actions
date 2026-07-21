@@ -29,6 +29,13 @@
   "_stampCell": "Celula pra carimbo de ultima atualizacao. Deixe '' pra desligar. Garanta que esteja FORA de destClearRange.",
   "stampCell": "",
 
+  "_status": "Colunas derivadas de status do cadastro, FORA do espelho D:DK. ATIVO = SIM se o TRABALHO consta no arquivo mais recente (snapshot completo), senao NAO (saiu do cadastro). ULTIMA_BASE = data (dd/mm/aaaa) do ultimo arquivo onde o TRABALHO apareceu. Deixe statusEnabled=false pra desligar. Alinhadas 1:1 com as linhas de D6.",
+  "statusEnabled": true,
+  "statusHeaderRange": "DL5:DM5",
+  "statusStartCell": "DL6",
+  "statusClearRange": "DL6:DM",
+  "statusHeaders": ["ATIVO", "ULTIMA_BASE"],
+
   "_render": "USER_ENTERED faz o Sheets reinterpretar datas/numeros ao escrever (igual digitar na celula).",
   "valueInputOption": "USER_ENTERED",
 

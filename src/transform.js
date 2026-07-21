@@ -64,19 +64,44 @@ function reorderRow(row, indices) {
 //   mantidas todas, anexadas no fim.
 function compile(files, keyIndex) {
   const sorted = [...files].sort((a, b) => (a.date ?? -1) - (b.date ?? -1));
-  const byKey = new Map();
-  const emptyKey = [];
+  // Data do arquivo mais recente = "verdade" do cadastro atual (snapshot completo).
+  // TRABALHO cuja ultima aparicao NAO e nesse arquivo => saiu do cadastro.
+  const maxDate = sorted.reduce((m, f) => (f.date != null && f.date > m ? f.date : m), -1);
+  const byKey = new Map(); // key -> { row, date } (date da ultima aparicao)
+  const emptyKey = []; // { row, date }
   let total = 0;
   for (const f of sorted) {
     for (const row of f.rows) {
       total++;
       const key = normHeader(row[keyIndex]);
-      if (key === "") emptyKey.push(row);
-      else byKey.set(key, row); // mais novo sobrescreve
+      if (key === "") emptyKey.push({ row, date: f.date });
+      else byKey.set(key, { row, date: f.date }); // mais novo sobrescreve
     }
   }
-  const out = [...byKey.values(), ...emptyKey];
-  return { rows: out, totalRead: total, uniqueKeys: byKey.size, emptyKeyRows: emptyKey.length };
+  const entries = [...byKey.values(), ...emptyKey];
+  const out = entries.map((e) => e.row);
+  // Status alinhado 1:1 com out. ativo = apareceu no arquivo mais recente.
+  const status = entries.map((e) => ({
+    ativo: e.date === maxDate ? "SIM" : "NAO",
+    ultimaBase: e.date, // AAAAMMDD (ou null)
+  }));
+  const inactive = status.filter((s) => s.ativo === "NAO").length;
+  return {
+    rows: out,
+    status,
+    maxDate,
+    inactive,
+    totalRead: total,
+    uniqueKeys: byKey.size,
+    emptyKeyRows: emptyKey.length,
+  };
+}
+
+// Formata AAAAMMDD (numero) -> "dd/mm/aaaa". null/invalido -> "".
+function ymdToStr(n) {
+  if (n == null || n < 0) return "";
+  const s = String(n).padStart(8, "0");
+  return `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)}`;
 }
 
 // Formata uma data (Date do SheetJS) como string pt-BR "dd/mm/aaaa" (ou com hora se houver).
@@ -121,4 +146,5 @@ module.exports = {
   padToWidth,
   excelDateToStr,
   cellToValue,
+  ymdToStr,
 };

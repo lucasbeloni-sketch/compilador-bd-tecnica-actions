@@ -12,6 +12,7 @@ const {
   compile,
   padToWidth,
   cellToValue,
+  ymdToStr,
 } = require("./transform");
 
 // Drive leitura + Sheets escrita.
@@ -129,12 +130,19 @@ async function main() {
     throw new Error("Nenhum arquivo valido pra compilar (todos pulados). Abortando sem escrever.");
 
   // 4) Compila + deduplica por TRABALHO (vence o arquivo mais recente).
-  const { rows: compiled, totalRead, uniqueKeys, emptyKeyRows } = compile(prepared, keyIndex);
+  const { rows: compiled, status, maxDate, inactive, totalRead, uniqueKeys, emptyKeyRows } =
+    compile(prepared, keyIndex);
   const rect = padToWidth(compiled, width);
   console.log(
     `[compila] ${totalRead} linha(s) lidas -> ${rect.length} final ` +
       `(${uniqueKeys} TRABALHO unico${emptyKeyRows ? ` + ${emptyKeyRows} sem TRABALHO` : ""}).`
   );
+  if (cfg.statusEnabled) {
+    console.log(
+      `[status] arquivo mais recente = ${ymdToStr(maxDate)}; ` +
+        `${rect.length - inactive} ATIVO(s), ${inactive} INATIVO(s) (sairam do cadastro).`
+    );
+  }
 
   // Guarda anti-apagao.
   const minRows = Number(cfg.minRows) || 0;
@@ -143,9 +151,23 @@ async function main() {
       `So ${rect.length} linha(s), abaixo de minRows=${minRows}. Abortando SEM limpar o destino.`
     );
 
+  // Valores das colunas de status (ATIVO, ULTIMA_BASE), alinhados 1:1 com rect.
+  const statusValues = cfg.statusEnabled
+    ? status.map((s) => [s.ativo, ymdToStr(s.ultimaBase)])
+    : null;
+
   if (dryRun) {
     console.log("[dry-run] nao escreve. Amostra (1a linha):");
     console.log(JSON.stringify(rect[0] || [], null, 0).slice(0, 800));
+    if (cfg.statusEnabled) {
+      const inativos = status.filter((s) => s.ativo === "NAO");
+      console.log(`[dry-run] status 1a linha: ${JSON.stringify(statusValues[0])}`);
+      if (inativos.length)
+        console.log(
+          `[dry-run] INATIVOS (${inativos.length}), ultima base: ` +
+            inativos.map((s) => ymdToStr(s.ultimaBase)).join(", ")
+        );
+    }
     return;
   }
 
@@ -172,6 +194,41 @@ async function main() {
     { label: "write-dest" }
   );
   console.log(`[destino] ${rect.length} linha(s) x ${width} col a partir de ${cfg.destStartCell}.`);
+
+  // 5b) Colunas de status (ATIVO, ULTIMA_BASE), fora do espelho D:DK.
+  if (cfg.statusEnabled) {
+    // Cabecalho (idempotente).
+    await withRetry(
+      () =>
+        sheets.spreadsheets.values.update({
+          spreadsheetId: cfg.destSpreadsheetId,
+          range: `${destA1}${cfg.statusHeaderRange}`,
+          valueInputOption: "RAW",
+          requestBody: { values: [cfg.statusHeaders] },
+        }),
+      { label: "write-status-header" }
+    );
+    // Limpa a faixa de dados antiga e escreve a nova.
+    await withRetry(
+      () =>
+        sheets.spreadsheets.values.clear({
+          spreadsheetId: cfg.destSpreadsheetId,
+          range: `${destA1}${cfg.statusClearRange}`,
+        }),
+      { label: "clear-status" }
+    );
+    await withRetry(
+      () =>
+        sheets.spreadsheets.values.update({
+          spreadsheetId: cfg.destSpreadsheetId,
+          range: `${destA1}${cfg.statusStartCell}`,
+          valueInputOption: cfg.valueInputOption,
+          requestBody: { values: statusValues },
+        }),
+      { label: "write-status" }
+    );
+    console.log(`[destino] status ${statusValues.length} linha(s) em ${cfg.statusStartCell} (${cfg.statusHeaders.join(", ")}).`);
+  }
 
   // 6) Carimbo opcional.
   if (cfg.stampCell) {

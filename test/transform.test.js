@@ -9,6 +9,7 @@ const {
   padToWidth,
   excelDateToStr,
   cellToValue,
+  ymdToStr,
 } = require("../src/transform");
 
 test("excelDateToStr formata data-only e arredonda artefato de segundos", () => {
@@ -91,4 +92,26 @@ test("compile: linha sem TRABALHO nao deduplica, fica no fim", () => {
 
 test("padToWidth normaliza largura", () => {
   assert.deepEqual(padToWidth([["a"], ["b", "c", "d"]], 2), [["a", ""], ["b", "c"]]);
+});
+
+test("compile: status marca ATIVO/INATIVO por presenca no arquivo mais recente", () => {
+  // T1 e T3 estao no mais recente (25/06); T2 so no antigo (03/06) -> saiu do cadastro.
+  const antigo = { date: 20260603, name: "antigo", rows: [["T1", "a"], ["T2", "b"]] };
+  const novo = { date: 20260625, name: "novo", rows: [["T1", "a2"], ["T3", "c"]] };
+  const { rows, status, maxDate, inactive } = compile([antigo, novo], 0);
+  assert.equal(maxDate, 20260625);
+  assert.equal(inactive, 1);
+  const byKey = Object.fromEntries(rows.map((r, i) => [r[0], status[i]]));
+  assert.equal(byKey.T1.ativo, "SIM");
+  assert.equal(byKey.T1.ultimaBase, 20260625);
+  assert.equal(byKey.T3.ativo, "SIM");
+  assert.equal(byKey.T2.ativo, "NAO");
+  assert.equal(byKey.T2.ultimaBase, 20260603); // ultima vez que apareceu
+});
+
+test("ymdToStr formata AAAAMMDD e trata vazio", () => {
+  assert.equal(ymdToStr(20260715), "15/07/2026");
+  assert.equal(ymdToStr(20260603), "03/06/2026");
+  assert.equal(ymdToStr(null), "");
+  assert.equal(ymdToStr(-1), "");
 });
