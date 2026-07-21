@@ -241,7 +241,9 @@ async function main() {
       minute: "2-digit",
       second: "2-digit",
       hour12: false,
-    }).format(new Date());
+    })
+      .format(new Date())
+      .replace(", ", " "); // "dd/mm/aaaa, hh:mm:ss" -> "dd/mm/aaaa hh:mm:ss" pra virar datetime real (USER_ENTERED)
     await withRetry(
       () =>
         sheets.spreadsheets.values.update({
