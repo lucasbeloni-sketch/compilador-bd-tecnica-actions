@@ -16,6 +16,7 @@ const {
 } = require("./transform");
 const { planUpsert, numToCol } = require("./carteira");
 const { atualizarFormulas, marcarEmAtualizacao } = require("./formulas");
+const { lerCabecalho, resolverColunas } = require("./colunas");
 
 // Drive leitura + Sheets escrita.
 const SCOPES = [
@@ -76,11 +77,24 @@ async function atualizarCarteira(sheets, cfg, refHeader, srcRows, dryRun) {
     throw new Error(`[carteira] so ${srcRows.length} linha(s) na ultima Tecnica (< minRows=${minRows}). Nao mexe na carteira.`);
 
   const a1 = `'${cc.sheet.replace(/'/g, "''")}'!`;
+
+  // Colunas por nome do cabecalho -> letras (erro antes de gravar se algum nao existir).
+  const header = await lerCabecalho(sheets, cc.spreadsheetId, cc.sheet, cc.headerRow);
+  const nomes = [cc.keyHeader, ...cc.map.map((m) => m.to), cc.stampHeader, cc.cityHeader].filter(Boolean);
+  const colNum = resolverColunas(header, nomes, "carteira");
+  const letra = (nome) => numToCol(colNum[nome]);
+  const ccRes = {
+    ...cc,
+    keyCol: letra(cc.keyHeader),
+    map: cc.map.map((m) => ({ from: m.from, to: letra(m.to) })),
+    stampCol: cc.stampHeader ? letra(cc.stampHeader) : "",
+    cityCol: cc.cityHeader ? letra(cc.cityHeader) : "",
+  };
   const keyResp = await withRetry(
     () =>
       sheets.spreadsheets.values.get({
         spreadsheetId: cc.spreadsheetId,
-        range: `${a1}${cc.keyCol}${cc.startRow}:${cc.keyCol}`,
+        range: `${a1}${ccRes.keyCol}${cc.startRow}:${ccRes.keyCol}`,
         valueRenderOption: "UNFORMATTED_VALUE",
       }),
     { label: "carteira-get-keys" }
@@ -101,7 +115,7 @@ async function atualizarCarteira(sheets, cfg, refHeader, srcRows, dryRun) {
       .format(new Date())
       .replace(", ", " ") + (cc.stampSuffix || "");
 
-  const plan = planUpsert({ srcRows, refHeader, destKeys, cfg: cc, stamp });
+  const plan = planUpsert({ srcRows, refHeader, destKeys, cfg: ccRes, stamp });
   console.log(
     `[carteira] ${srcRows.length} linha(s) na ultima Tecnica; destino com chave ate a linha ${plan.lastFilledRow}. ` +
       `Atualizadas: ${plan.updated} | Inseridas: ${plan.inserted} (a partir da linha ${plan.firstNewRow}).`

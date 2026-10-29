@@ -44,13 +44,27 @@ Substitui os Apps Scripts `copiarChecklistGPM`, `Formulas_Carteira_Plan_Nova_Par
 1. Copia `BD_Checklist_GPM!A3:AA` da planilha Bases pra `BD_Checklist_GPM!A2` da planilha de
    Juazeiro, ordenado decrescente pela coluna G (vazios no fim); copia o formato de data das colunas.
 2. `F3` = "Em Atualização" (gravado no INICIO do robo, antes da etapa 1).
-3. Limpa `B:D, O:P, R:V, Z:AF, AK, AN:AS, AY, BC:BH, BO` da linha 6 ate a ultima chave em E.
+3. Limpa as colunas de `formulas.columns` (hoje `B:D, O:P, R:V, Z:AF, AK, AN:AS, AY, BC:BH, BO`) da linha 6 ate a ultima chave em TRABALHO.
 4. Cola as **formulas-modelo da linha 1** (`copyPaste PASTE_FORMULA`, ajusta referencias como o
    `copyTo`), le o calculado (rele se `IMPORTRANGE` responder "Loading...") e grava como valor.
    Pra mudar uma formula, edite a linha 1 da planilha.
 5. Classifica o solo: AZ/BA (UTM SIRGAS 2000 fuso 24S ou graus) -> lat/lon -> poligono do Mapa
    Geologico do Ceara (SGB/CPRM 1:500.000, 2021, em `data/ceara_geo.json`) -> rotulo em `BM`.
 6. `F3` = data/hora do fim. Se o run falhar no meio, F3 fica "Em Atualização".
+
+## Colunas da Carteira_Planejador por cabecalho
+
+As etapas 2 e 3 acham as colunas da `Carteira_Planejador` pelo **nome do cabecalho da linha 5**
+(`carteira.map[].to`, `keyHeader`, `stampHeader`, `cityHeader`, `formulas.columns`,
+`formulas.geologia.*Header`), nao pela letra. Inserir/mover colunas na planilha nao quebra o robo.
+Comparacao ignora maiusculas, espacos extras e quebra de linha (`"TOTAL 
+PT"` = `TOTAL PT`).
+
+- Cabecalho esperado **ausente ou duplicado** -> o run falha **antes de gravar** (abre issue).
+  Se renomear um cabecalho na planilha, renomeie tambem no `config.json`.
+- `formulas.columns`: vizinhas viram uma faixa; coluna nova inserida no meio NAO e limpa.
+- Celula de status = linha `status.row`, `status.offsetCols` a direita de `status.anchorHeader`
+  (hoje F3 = TRABALHO + 1).
 
 ## Configuracao
 

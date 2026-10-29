@@ -12,6 +12,8 @@
 const { withRetry } = require("../lib/google");
 const { colToNum } = require("./carteira");
 const { classificarPar } = require("./geologia");
+const { lerCabecalho, resolverColunas, agruparFaixas } = require("./colunas");
+const { numToCol } = require("./carteira");
 
 // Comparador DECRESCENTE do script: vazio sempre no fim; numero com numero; resto como texto.
 function compararDecrescente(a, b) {
@@ -187,10 +189,48 @@ async function basicFilterDe(sheets, spreadsheetId, title) {
   return out;
 }
 
+// Resolve as colunas do bloco formulas pelo cabecalho da linha headerRow -> letras/celulas.
+// Erro (antes de qualquer escrita) se algum cabecalho faltar ou estiver duplicado.
+async function resolverFormulas(sheets, fc) {
+  const header = await lerCabecalho(sheets, fc.spreadsheetId, fc.sheet, fc.headerRow);
+  const geo = fc.geologia?.enabled ? fc.geologia : null;
+  const nomes = [
+    fc.keyHeader,
+    ...fc.columns,
+    fc.status.anchorHeader,
+    ...(geo ? [geo.latHeader, geo.lonHeader, geo.outHeader] : []),
+  ];
+  const c = resolverColunas(header, nomes, "formulas");
+  return {
+    ...fc,
+    keyCol: numToCol(c[fc.keyHeader]),
+    ranges: agruparFaixas(fc.columns.map((n) => c[n])),
+    statusCell: `${numToCol(c[fc.status.anchorHeader] + (fc.status.offsetCols || 0))}${fc.status.row}`,
+    geologia: geo
+      ? { ...geo, colA: numToCol(c[geo.latHeader]), colB: numToCol(c[geo.lonHeader]), outCol: numToCol(c[geo.outHeader]) }
+      : null,
+  };
+}
+
+// Le as duas colunas de coordenada (separadas: nao precisam ser vizinhas) -> [[a, b], ...] com n linhas.
+async function lerCoords(sheets, id, a1, geo, startRow, lastRow, n) {
+  const r = await withRetry(
+    () =>
+      sheets.spreadsheets.values.batchGet({
+        spreadsheetId: id,
+        ranges: [`${a1}${geo.colA}${startRow}:${geo.colA}${lastRow}`, `${a1}${geo.colB}${startRow}:${geo.colB}${lastRow}`],
+        valueRenderOption: "UNFORMATTED_VALUE",
+      }),
+    { label: "geo-get" }
+  );
+  const [ca, cb] = r.data.valueRanges.map((vr) => padRect(vr.values || [], n, 1));
+  return ca.map((row, i) => [row[0], cb[i][0]]);
+}
+
 // statusCell = statusRunning. Chamado no inicio do robo (antes da etapa 1).
 async function marcarEmAtualizacao(sheets, cfg) {
-  const fc = cfg.formulas;
-  if (!fc || !fc.enabled || !fc.statusCell) return;
+  if (!cfg.formulas || !cfg.formulas.enabled || !cfg.formulas.status) return;
+  const fc = await resolverFormulas(sheets, cfg.formulas);
   await withRetry(
     () =>
       sheets.spreadsheets.values.update({
@@ -206,8 +246,8 @@ async function marcarEmAtualizacao(sheets, cfg) {
 
 // ---- 3..6) Formulas + geologia ----
 async function atualizarFormulas(sheets, cfg, { dryRun, stampNow }) {
-  const fc = cfg.formulas;
-  if (!fc || !fc.enabled) return;
+  if (!cfg.formulas || !cfg.formulas.enabled) return;
+  const fc = await resolverFormulas(sheets, cfg.formulas);
   const id = fc.spreadsheetId;
   const a1 = q(fc.sheet);
 
@@ -238,17 +278,9 @@ async function atualizarFormulas(sheets, cfg, { dryRun, stampNow }) {
   const geoCfg = fc.geologia;
   if (dryRun) {
     if (geoCfg?.enabled) {
-      const g = await withRetry(
-        () =>
-          sheets.spreadsheets.values.get({
-            spreadsheetId: id,
-            range: `${a1}${geoCfg.colA}${fc.startRow}:${geoCfg.colB}${lastRow}`,
-            valueRenderOption: "UNFORMATTED_VALUE",
-          }),
-        { label: "geo-get" }
-      );
+      const coords = await lerCoords(sheets, id, a1, geoCfg, fc.startRow, lastRow, n);
       const cnt = {};
-      padRect(g.data.values || [], n, 2).forEach((r) => {
+      coords.forEach((r) => {
         const v = classificarPar(r[0], r[1], geoCfg.fusoUtm) || "(sem coord)";
         cnt[v] = (cnt[v] || 0) + 1;
       });
@@ -360,16 +392,8 @@ async function atualizarFormulas(sheets, cfg, { dryRun, stampNow }) {
 
   // 5) Geologia.
   if (geoCfg?.enabled) {
-    const g = await withRetry(
-      () =>
-        sheets.spreadsheets.values.get({
-          spreadsheetId: id,
-          range: `${a1}${geoCfg.colA}${fc.startRow}:${geoCfg.colB}${lastRow}`,
-          valueRenderOption: "UNFORMATTED_VALUE",
-        }),
-      { label: "geo-get" }
-    );
-    const out = padRect(g.data.values || [], n, 2).map((r) => [classificarPar(r[0], r[1], geoCfg.fusoUtm)]);
+    const coords = await lerCoords(sheets, id, a1, geoCfg, fc.startRow, lastRow, n);
+    const out = coords.map((r) => [classificarPar(r[0], r[1], geoCfg.fusoUtm)]);
     await withRetry(
       () =>
         sheets.spreadsheets.values.update({
@@ -390,4 +414,4 @@ async function atualizarFormulas(sheets, cfg, { dryRun, stampNow }) {
   console.log(`[formulas] ${fc.statusCell}: ${fim}`);
 }
 
-module.exports = { atualizarFormulas, marcarEmAtualizacao, basicFilterDe, compararDecrescente, padRect, parseCols, lastFilledRow };
+module.exports = { atualizarFormulas, marcarEmAtualizacao, resolverFormulas, basicFilterDe, compararDecrescente, padRect, parseCols, lastFilledRow };
