@@ -15,6 +15,7 @@ const {
   ymdToStr,
 } = require("./transform");
 const { planUpsert, numToCol } = require("./carteira");
+const { atualizarFormulas } = require("./formulas");
 
 // Drive leitura + Sheets escrita.
 const SCOPES = [
@@ -313,6 +314,7 @@ async function main() {
         );
     }
     await atualizarCarteira(sheets, cfg, refHeader, ultimaTecnica, true);
+    await atualizarFormulas(sheets, cfg, { dryRun: true, stampNow });
     return;
   }
 
@@ -404,6 +406,9 @@ async function main() {
 
   // 7) Etapa 2: Carteira_Planejador.
   await atualizarCarteira(sheets, cfg, refHeader, ultimaTecnica, false);
+
+  // 8) Etapa 3: formulas congeladas + checklist + geologia.
+  await atualizarFormulas(sheets, cfg, { dryRun: false, stampNow });
 
   console.log("OK.");
 }

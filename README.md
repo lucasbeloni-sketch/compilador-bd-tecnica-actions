@@ -36,6 +36,22 @@ Roda no mesmo `npm start`, depois da BD_Tecnica. Config no bloco `carteira` do `
 - `map.from` e o NOME no cabecalho de referencia (nao posicao). A aba BD_TECNICA da planilha
   de Juazeiro (colada a mao, a partir da coluna A) nao e mais usada.
 
+## Etapa 3: formulas da Carteira_Planejador
+
+Substitui os Apps Scripts `copiarChecklistGPM`, `Formulas_Carteira_Plan_Nova_Part1/2/3` e
+`classificarSoloRochoso`. Roda depois da etapa 2. Config no bloco `formulas` do `config.json`.
+
+1. Copia `BD_Checklist_GPM!A3:AA` da planilha Bases pra `BD_Checklist_GPM!A2` da planilha de
+   Juazeiro, ordenado decrescente pela coluna G (vazios no fim); copia o formato de data das colunas.
+2. `F3` = "Em Atualização".
+3. Limpa `B:D, O:P, R:V, Z:AF, AK, AN:AS, AY, BC:BH, BO` da linha 6 ate a ultima chave em E.
+4. Cola as **formulas-modelo da linha 1** (`copyPaste PASTE_FORMULA`, ajusta referencias como o
+   `copyTo`), le o calculado (rele se `IMPORTRANGE` responder "Loading...") e grava como valor.
+   Pra mudar uma formula, edite a linha 1 da planilha.
+5. Classifica o solo: AZ/BA (UTM SIRGAS 2000 fuso 24S ou graus) -> lat/lon -> poligono do Mapa
+   Geologico do Ceara (SGB/CPRM 1:500.000, 2021, em `data/ceara_geo.json`) -> rotulo em `BM`.
+6. `F3` = data/hora do fim. Se o run falhar no meio, F3 fica "Em Atualização".
+
 ## Configuracao
 
 Tudo em [`config.json`](./config.json). IDs ja preenchidos:

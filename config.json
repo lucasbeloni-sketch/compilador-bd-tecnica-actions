@@ -76,5 +76,37 @@
     "minRows": 1,
     "_stampCell": "Carimbo de data/hora do fim do ciclo (dd/mm/aaaa hh:mm:ss, fuso timezone). '' desliga.",
     "stampCell": "F2"
+  },
+
+  "_formulas": "Etapa 3 (substitui os Apps Scripts copiarChecklistGPM + Formulas_Carteira_Plan_Nova_Part1/2/3 + classificarSoloRochoso). checklist: copia srcSheet!A{srcStartRow}:{lastCol} da planilha Bases pra destSheet!A{destStartRow}, ordenado DESC por sortCol. Depois: statusCell='Em Atualizacao', limpa as faixas (ranges) de startRow ate a ultima chave em keyCol, cola as formulas da linha templateRow (PASTE_FORMULA), le o calculado e grava como valor; classifica solo (AZ/BA -> BM); statusCell = data/hora do fim. As formulas ficam na linha templateRow da propria planilha: editar la, nao aqui.",
+  "formulas": {
+    "enabled": true,
+    "spreadsheetId": "1-pTrlIfq4k11cH1rFSz4QOCAZ87ozRHAylcJqOAwRWQ",
+    "sheet": "Carteira_Planejador",
+    "keyCol": "E",
+    "startRow": 6,
+    "templateRow": 1,
+    "ranges": ["B:D", "O:P", "R:V", "Z:AF", "AK", "AN:AS", "AY", "BC:BH", "BO"],
+    "statusCell": "F3",
+    "statusRunning": "Em Atualização",
+    "loadingRetries": 12,
+    "loadingWaitMs": 5000,
+    "checklist": {
+      "enabled": true,
+      "srcSpreadsheetId": "1YtcYEFgrxVW59xG-H57gV25hWpZtROwnabZgVNrPnz0",
+      "srcSheet": "BD_Checklist_GPM",
+      "srcStartRow": 3,
+      "lastCol": "AA",
+      "sortCol": "G",
+      "destSheet": "BD_Checklist_GPM",
+      "destStartRow": 2
+    },
+    "geologia": {
+      "enabled": true,
+      "colA": "AZ",
+      "colB": "BA",
+      "outCol": "BM",
+      "fusoUtm": 24
+    }
   }
 }
