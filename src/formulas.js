@@ -166,6 +166,27 @@ async function copiarChecklist(sheets, ck, destId, dryRun) {
   console.log(`[checklist] gravado em ${ck.destSheet}!A${ck.destStartRow} (${requests.length} coluna(s) com formato de data).`);
 }
 
+// Filtro basico da aba (pra recolocar igual depois), ou null. Sem o campo legado "criteria"
+// quando ja vier "filterSpecs" (mandar os dois da erro).
+async function basicFilterDe(sheets, spreadsheetId, title) {
+  const r = await withRetry(
+    () =>
+      // Sem "ranges": com ranges a API nao devolve basicFilter (testado).
+      sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: "sheets(properties.title,basicFilter)",
+      }),
+    { label: "formulas-get-filter" }
+  );
+  const bf = (r.data.sheets || []).find((sh) => sh.properties.title === title)?.basicFilter;
+  if (!bf) return null;
+  const out = { range: bf.range };
+  if (bf.sortSpecs) out.sortSpecs = bf.sortSpecs;
+  if (bf.filterSpecs) out.filterSpecs = bf.filterSpecs;
+  else if (bf.criteria) out.criteria = bf.criteria;
+  return out;
+}
+
 // statusCell = statusRunning. Chamado no inicio do robo (antes da etapa 1).
 async function marcarEmAtualizacao(sheets, cfg) {
   const fc = cfg.formulas;
@@ -279,11 +300,21 @@ async function atualizarFormulas(sheets, cfg, { dryRun, stampNow }) {
       pasteType: "PASTE_FORMULA",
     },
   }));
+  // copyPaste PULA linhas escondidas por filtro basico (testado): com filtro ativo, as linhas
+  // filtradas ficariam sem formula e seriam congeladas em branco. Entao, se houver filtro, tira,
+  // cola e recoloca igual no MESMO batchUpdate (atomico: o filtro nunca fica perdido).
+  const filtro = await basicFilterDe(sheets, id, fc.sheet);
+  const pasteReqs = filtro
+    ? [{ clearBasicFilter: { sheetId: props.sheetId } }, ...requests, { setBasicFilter: { filter: filtro } }]
+    : requests;
   await withRetry(
-    () => sheets.spreadsheets.batchUpdate({ spreadsheetId: id, requestBody: { requests } }),
+    () => sheets.spreadsheets.batchUpdate({ spreadsheetId: id, requestBody: { requests: pasteReqs } }),
     { label: "formulas-paste" }
   );
-  console.log(`[formulas] formulas da linha ${fc.templateRow} coladas.`);
+  console.log(
+    `[formulas] formulas da linha ${fc.templateRow} coladas` +
+      (filtro ? " (filtro da aba retirado e recolocado no mesmo lote)." : ".")
+  );
 
   // 4b) Le o calculado. IMPORTRANGE pode responder "Loading..." logo apos colar: espera e rele.
   const loading = /^(loading|carregando)/i;
@@ -359,4 +390,4 @@ async function atualizarFormulas(sheets, cfg, { dryRun, stampNow }) {
   console.log(`[formulas] ${fc.statusCell}: ${fim}`);
 }
 
-module.exports = { atualizarFormulas, marcarEmAtualizacao, compararDecrescente, padRect, parseCols, lastFilledRow };
+module.exports = { atualizarFormulas, marcarEmAtualizacao, basicFilterDe, compararDecrescente, padRect, parseCols, lastFilledRow };
