@@ -32,7 +32,7 @@ Roda no mesmo `npm start`, depois da BD_Tecnica. Config no bloco `carteira` do `
   - novo -> linha nova apos a ultima chave, com carimbo em `BB`
     (`dd/mm/aaaa hh:mm - Entrada na Carteira-Planejador`) e `JUAZEIRO DO NORTE` em `BI`.
 - TRABALHO que saiu da Tecnica fica intocado.
-- Fim do ciclo: carimbo de data/hora em `F2` (`carteira.stampCell`).
+- Carimbo opcional de fim da etapa em `carteira.stampCell` (desligado: `""`).
 - `map.from` e o NOME no cabecalho de referencia (nao posicao). A aba BD_TECNICA da planilha
   de Juazeiro (colada a mao, a partir da coluna A) nao e mais usada.
 
@@ -43,7 +43,7 @@ Substitui os Apps Scripts `copiarChecklistGPM`, `Formulas_Carteira_Plan_Nova_Par
 
 1. Copia `BD_Checklist_GPM!A3:AA` da planilha Bases pra `BD_Checklist_GPM!A2` da planilha de
    Juazeiro, ordenado decrescente pela coluna G (vazios no fim); copia o formato de data das colunas.
-2. `F3` = "Em Atualização".
+2. `F3` = "Em Atualização" (gravado no INICIO do robo, antes da etapa 1).
 3. Limpa `B:D, O:P, R:V, Z:AF, AK, AN:AS, AY, BC:BH, BO` da linha 6 ate a ultima chave em E.
 4. Cola as **formulas-modelo da linha 1** (`copyPaste PASTE_FORMULA`, ajusta referencias como o
    `copyTo`), le o calculado (rele se `IMPORTRANGE` responder "Loading...") e grava como valor.

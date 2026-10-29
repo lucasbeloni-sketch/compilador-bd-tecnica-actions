@@ -3,7 +3,7 @@
 //
 // 1) Copia BD_Checklist_GPM (planilha Bases) pra BD_Checklist_GPM da planilha de Juazeiro,
 //    ordenado DECRESCENTE pela coluna sortCol (vazios no fim).
-// 2) statusCell = "Em Atualizacao".
+// 2) statusCell = "Em Atualizacao" — marcado no INICIO do robo (marcarEmAtualizacao), nao aqui.
 // 3) Limpa as faixas da linha startRow ate a ultima chave em keyCol.
 // 4) Cola as formulas-modelo da linha templateRow nas faixas (PASTE_FORMULA ajusta referencias
 //    relativas, igual ao copyTo do script), le o resultado calculado e grava como VALOR.
@@ -166,7 +166,24 @@ async function copiarChecklist(sheets, ck, destId, dryRun) {
   console.log(`[checklist] gravado em ${ck.destSheet}!A${ck.destStartRow} (${requests.length} coluna(s) com formato de data).`);
 }
 
-// ---- 2..6) Formulas + geologia ----
+// statusCell = statusRunning. Chamado no inicio do robo (antes da etapa 1).
+async function marcarEmAtualizacao(sheets, cfg) {
+  const fc = cfg.formulas;
+  if (!fc || !fc.enabled || !fc.statusCell) return;
+  await withRetry(
+    () =>
+      sheets.spreadsheets.values.update({
+        spreadsheetId: fc.spreadsheetId,
+        range: `${q(fc.sheet)}${fc.statusCell}`,
+        valueInputOption: "RAW",
+        requestBody: { values: [[fc.statusRunning]] },
+      }),
+    { label: "formulas-status-inicio" }
+  );
+  console.log(`[formulas] ${fc.statusCell}: ${fc.statusRunning}`);
+}
+
+// ---- 3..6) Formulas + geologia ----
 async function atualizarFormulas(sheets, cfg, { dryRun, stampNow }) {
   const fc = cfg.formulas;
   if (!fc || !fc.enabled) return;
@@ -230,8 +247,6 @@ async function atualizarFormulas(sheets, cfg, { dryRun, stampNow }) {
         }),
       { label: "formulas-status" }
     );
-  await setStatus(fc.statusRunning, "RAW");
-
   // 3) Limpa.
   await withRetry(
     () =>
@@ -344,4 +359,4 @@ async function atualizarFormulas(sheets, cfg, { dryRun, stampNow }) {
   console.log(`[formulas] ${fc.statusCell}: ${fim}`);
 }
 
-module.exports = { atualizarFormulas, compararDecrescente, padRect, parseCols, lastFilledRow };
+module.exports = { atualizarFormulas, marcarEmAtualizacao, compararDecrescente, padRect, parseCols, lastFilledRow };

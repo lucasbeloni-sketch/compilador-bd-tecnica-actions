@@ -75,7 +75,7 @@
     "_minRows": "Guarda: se a ultima Tecnica tiver menos linhas que isso, pula a etapa (falha o run) sem tocar na carteira.",
     "minRows": 1,
     "_stampCell": "Carimbo de data/hora do fim do ciclo (dd/mm/aaaa hh:mm:ss, fuso timezone). '' desliga.",
-    "stampCell": "F2"
+    "stampCell": ""
   },
 
   "_formulas": "Etapa 3 (substitui os Apps Scripts copiarChecklistGPM + Formulas_Carteira_Plan_Nova_Part1/2/3 + classificarSoloRochoso). checklist: copia srcSheet!A{srcStartRow}:{lastCol} da planilha Bases pra destSheet!A{destStartRow}, ordenado DESC por sortCol. Depois: statusCell='Em Atualizacao', limpa as faixas (ranges) de startRow ate a ultima chave em keyCol, cola as formulas da linha templateRow (PASTE_FORMULA), le o calculado e grava como valor; classifica solo (AZ/BA -> BM); statusCell = data/hora do fim. As formulas ficam na linha templateRow da propria planilha: editar la, nao aqui.",

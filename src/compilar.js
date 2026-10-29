@@ -15,7 +15,7 @@ const {
   ymdToStr,
 } = require("./transform");
 const { planUpsert, numToCol } = require("./carteira");
-const { atualizarFormulas } = require("./formulas");
+const { atualizarFormulas, marcarEmAtualizacao } = require("./formulas");
 
 // Drive leitura + Sheets escrita.
 const SCOPES = [
@@ -197,6 +197,9 @@ async function main() {
   const authClient = await getAuthClient(SCOPES);
   const sheets = google.sheets({ version: "v4", auth: authClient });
   const drive = google.drive({ version: "v3", auth: authClient });
+
+  // F3 da Carteira_Planejador = "Em Atualização" ja no inicio; a etapa 3 troca pela data/hora do fim.
+  if (!dryRun) await marcarEmAtualizacao(sheets, cfg);
 
   // 1) Cabecalho de referencia (nomes + ordem alvo) lido do proprio destino.
   const refResp = await withRetry(
