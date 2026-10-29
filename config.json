@@ -73,6 +73,8 @@
     "cityCol": "BI",
     "cityValue": "JUAZEIRO DO NORTE",
     "_minRows": "Guarda: se a ultima Tecnica tiver menos linhas que isso, pula a etapa (falha o run) sem tocar na carteira.",
-    "minRows": 1
+    "minRows": 1,
+    "_stampCell": "Carimbo de data/hora do fim do ciclo (dd/mm/aaaa hh:mm:ss, fuso timezone). '' desliga.",
+    "stampCell": "F2"
   }
 }

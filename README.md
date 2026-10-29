@@ -32,6 +32,7 @@ Roda no mesmo `npm start`, depois da BD_Tecnica. Config no bloco `carteira` do `
   - novo -> linha nova apos a ultima chave, com carimbo em `BB`
     (`dd/mm/aaaa hh:mm - Entrada na Carteira-Planejador`) e `JUAZEIRO DO NORTE` em `BI`.
 - TRABALHO que saiu da Tecnica fica intocado.
+- Fim do ciclo: carimbo de data/hora em `F2` (`carteira.stampCell`).
 - `map.from` e o NOME no cabecalho de referencia (nao posicao). A aba BD_TECNICA da planilha
   de Juazeiro (colada a mao, a partir da coluna A) nao e mais usada.
 

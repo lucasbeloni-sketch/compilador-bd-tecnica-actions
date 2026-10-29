@@ -49,6 +49,22 @@ function readXlsx(buf, headerRow1Based) {
   return { header, rows };
 }
 
+// "dd/mm/aaaa hh:mm:ss" no fuso tz (sem virgula, pra USER_ENTERED virar datetime real).
+function stampNow(tz) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz || "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+    .format(new Date())
+    .replace(", ", " ");
+}
+
 // Etapa 2: upsert na Carteira_Planejador (substitui o Apps Script atualizarCarteiraPlanejador).
 // srcRows = linhas da ultima Tecnica, ja na ordem do cabecalho de referencia.
 async function atualizarCarteira(sheets, cfg, refHeader, srcRows, dryRun) {
@@ -144,16 +160,33 @@ async function atualizarCarteira(sheets, cfg, refHeader, srcRows, dryRun) {
       values: plan.newRows,
     });
   }
-  if (!data.length) return;
-  await withRetry(
-    () =>
-      sheets.spreadsheets.values.batchUpdate({
-        spreadsheetId: cc.spreadsheetId,
-        requestBody: { valueInputOption: cfg.valueInputOption, data },
-      }),
-    { label: "carteira-write" }
-  );
-  console.log(`[carteira] gravado (${data.length} range(s)).`);
+  if (data.length) {
+    await withRetry(
+      () =>
+        sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: cc.spreadsheetId,
+          requestBody: { valueInputOption: cfg.valueInputOption, data },
+        }),
+      { label: "carteira-write" }
+    );
+    console.log(`[carteira] gravado (${data.length} range(s)).`);
+  }
+
+  // Carimbo do fim do ciclo.
+  if (cc.stampCell) {
+    const fim = stampNow(cfg.timezone);
+    await withRetry(
+      () =>
+        sheets.spreadsheets.values.update({
+          spreadsheetId: cc.spreadsheetId,
+          range: `${a1}${cc.stampCell}`,
+          valueInputOption: cfg.valueInputOption,
+          requestBody: { values: [[fim]] },
+        }),
+      { label: "carteira-stamp" }
+    );
+    console.log(`[carteira] carimbo ${cc.stampCell}: ${fim}`);
+  }
 }
 
 async function main() {
