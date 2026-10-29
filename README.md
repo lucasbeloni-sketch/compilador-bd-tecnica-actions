@@ -20,6 +20,21 @@ o arquivo mais recente** e cola na aba `BD_Tecnica`.
 
 Guarda anti-apagao: se compilar menos que `minRows`, aborta **sem** limpar o destino.
 
+## Etapa 2: Carteira_Planejador
+
+Substitui o Apps Script `atualizarCarteiraPlanejador` da planilha
+`1-pTrlIfq4k11cH1rFSz4QOCAZ87ozRHAylcJqOAwRWQ` (CCM - Planejamento - Juazeiro do Norte).
+Roda no mesmo `npm start`, depois da BD_Tecnica. Config no bloco `carteira` do `config.json`.
+
+- Fonte = TRABALHO presentes no `.xlsx` mais recente (ATIVO=SIM) = "ultima Tecnica".
+- Upsert por TRABALHO na coluna `E` a partir da linha 6:
+  - ja existe -> sobrescreve so as colunas de `carteira.map` (nunca E, BB nem BI);
+  - novo -> linha nova apos a ultima chave, com carimbo em `BB`
+    (`dd/mm/aaaa hh:mm - Entrada na Carteira-Planejador`) e `JUAZEIRO DO NORTE` em `BI`.
+- TRABALHO que saiu da Tecnica fica intocado.
+- `map.from` e o NOME no cabecalho de referencia (nao posicao). A aba BD_TECNICA da planilha
+  de Juazeiro (colada a mao, a partir da coluna A) nao e mais usada.
+
 ## Configuracao
 
 Tudo em [`config.json`](./config.json). IDs ja preenchidos:

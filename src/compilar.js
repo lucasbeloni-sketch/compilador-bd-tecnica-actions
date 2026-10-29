@@ -14,6 +14,7 @@ const {
   cellToValue,
   ymdToStr,
 } = require("./transform");
+const { planUpsert, numToCol } = require("./carteira");
 
 // Drive leitura + Sheets escrita.
 const SCOPES = [
@@ -46,6 +47,113 @@ function readXlsx(buf, headerRow1Based) {
   const header = (matrix[hIdx] || []).map((h) => String(h ?? ""));
   const rows = matrix.slice(hIdx + 1).map((row) => row.map(cellToValue));
   return { header, rows };
+}
+
+// Etapa 2: upsert na Carteira_Planejador (substitui o Apps Script atualizarCarteiraPlanejador).
+// srcRows = linhas da ultima Tecnica, ja na ordem do cabecalho de referencia.
+async function atualizarCarteira(sheets, cfg, refHeader, srcRows, dryRun) {
+  const cc = cfg.carteira;
+  if (!cc || !cc.enabled) return;
+  const minRows = Number(cc.minRows) || 0;
+  if (srcRows.length < minRows)
+    throw new Error(`[carteira] so ${srcRows.length} linha(s) na ultima Tecnica (< minRows=${minRows}). Nao mexe na carteira.`);
+
+  const a1 = `'${cc.sheet.replace(/'/g, "''")}'!`;
+  const keyResp = await withRetry(
+    () =>
+      sheets.spreadsheets.values.get({
+        spreadsheetId: cc.spreadsheetId,
+        range: `${a1}${cc.keyCol}${cc.startRow}:${cc.keyCol}`,
+        valueRenderOption: "UNFORMATTED_VALUE",
+      }),
+    { label: "carteira-get-keys" }
+  );
+  const destKeys = (keyResp.data.values || []).map((r) => r[0] ?? "");
+
+  // Mesmo formato do script: "dd/MM/yyyy HH:mm - Entrada na Carteira-Planejador".
+  const stamp =
+    new Intl.DateTimeFormat("pt-BR", {
+      timeZone: cfg.timezone || "America/Sao_Paulo",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+      .format(new Date())
+      .replace(", ", " ") + (cc.stampSuffix || "");
+
+  const plan = planUpsert({ srcRows, refHeader, destKeys, cfg: cc, stamp });
+  console.log(
+    `[carteira] ${srcRows.length} linha(s) na ultima Tecnica; destino com chave ate a linha ${plan.lastFilledRow}. ` +
+      `Atualizadas: ${plan.updated} | Inseridas: ${plan.inserted} (a partir da linha ${plan.firstNewRow}).`
+  );
+
+  if (dryRun) {
+    if (plan.newRows.length)
+      console.log(`[dry-run] carteira 1a linha nova: ${JSON.stringify(plan.newRows[0]).slice(0, 800)}`);
+    return;
+  }
+
+  // Garante grade suficiente pras linhas novas (aba nao cresce sozinha).
+  const lastNeeded = plan.firstNewRow + plan.newRows.length - 1;
+  if (plan.newRows.length) {
+    const meta = await withRetry(
+      () =>
+        sheets.spreadsheets.get({
+          spreadsheetId: cc.spreadsheetId,
+          fields: "sheets.properties(sheetId,title,gridProperties.rowCount)",
+        }),
+      { label: "carteira-meta" }
+    );
+    const props = meta.data.sheets.map((s) => s.properties).find((p) => p.title === cc.sheet);
+    if (!props) throw new Error(`[carteira] aba "${cc.sheet}" nao encontrada.`);
+    const missing = lastNeeded - props.gridProperties.rowCount;
+    if (missing > 0) {
+      await withRetry(
+        () =>
+          sheets.spreadsheets.batchUpdate({
+            spreadsheetId: cc.spreadsheetId,
+            requestBody: {
+              requests: [{ appendDimension: { sheetId: props.sheetId, dimension: "ROWS", length: missing } }],
+            },
+          }),
+        { label: "carteira-append-rows" }
+      );
+      console.log(`[carteira] +${missing} linha(s) na grade.`);
+    }
+  }
+
+  // Existentes: 1 range por coluna mapeada; null = celula nao tocada (preserva o que o
+  // planejador digitou nas linhas que nao estao na ultima Tecnica).
+  const data = [];
+  if (plan.updated) {
+    for (const [col, vals] of Object.entries(plan.updates)) {
+      const L = numToCol(Number(col));
+      data.push({
+        range: `${a1}${L}${cc.startRow}:${L}${plan.lastFilledRow}`,
+        values: vals.map((v) => [v]),
+      });
+    }
+  }
+  // Novas: linha inteira A..ultima coluna, igual ao script.
+  if (plan.newRows.length) {
+    data.push({
+      range: `${a1}A${plan.firstNewRow}:${numToCol(plan.width)}${lastNeeded}`,
+      values: plan.newRows,
+    });
+  }
+  if (!data.length) return;
+  await withRetry(
+    () =>
+      sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: cc.spreadsheetId,
+        requestBody: { valueInputOption: cfg.valueInputOption, data },
+      }),
+    { label: "carteira-write" }
+  );
+  console.log(`[carteira] gravado (${data.length} range(s)).`);
 }
 
 async function main() {
@@ -156,6 +264,9 @@ async function main() {
     ? status.map((s) => [s.ativo, ymdToStr(s.ultimaBase)])
     : null;
 
+  // Ultima Tecnica = TRABALHO presente no arquivo mais recente (ATIVO=SIM).
+  const ultimaTecnica = rect.filter((_, i) => status[i].ativo === "SIM");
+
   if (dryRun) {
     console.log("[dry-run] nao escreve. Amostra (1a linha):");
     console.log(JSON.stringify(rect[0] || [], null, 0).slice(0, 800));
@@ -168,6 +279,7 @@ async function main() {
             inativos.map((s) => ymdToStr(s.ultimaBase)).join(", ")
         );
     }
+    await atualizarCarteira(sheets, cfg, refHeader, ultimaTecnica, true);
     return;
   }
 
@@ -256,6 +368,9 @@ async function main() {
     );
     console.log(`[destino] carimbo ${cfg.stampCell}: ${stamp}`);
   }
+
+  // 7) Etapa 2: Carteira_Planejador.
+  await atualizarCarteira(sheets, cfg, refHeader, ultimaTecnica, false);
 
   console.log("OK.");
 }

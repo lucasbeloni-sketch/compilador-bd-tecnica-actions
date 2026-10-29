@@ -39,5 +39,40 @@
   "_render": "USER_ENTERED faz o Sheets reinterpretar datas/numeros ao escrever (igual digitar na celula).",
   "valueInputOption": "USER_ENTERED",
 
-  "timezone": "America/Sao_Paulo"
+  "timezone": "America/Sao_Paulo",
+
+  "_carteira": "Etapa 2 (substitui o Apps Script atualizarCarteiraPlanejador). Fonte = linhas ATIVO=SIM (TRABALHO presente no .xlsx mais recente = 'ultima Tecnica'). Upsert por TRABALHO na coluna keyCol a partir de startRow: existente -> sobrescreve so as colunas do map (nunca chave/carimbo/cidade); novo -> linha nova apos a ultima chave, com carimbo em stampCol e cityValue em cityCol. TRABALHO que saiu da Tecnica fica intocado. map.from = nome no cabecalho de referencia (headerRefRange). enabled=false desliga.",
+  "carteira": {
+    "enabled": true,
+    "spreadsheetId": "1-pTrlIfq4k11cH1rFSz4QOCAZ87ozRHAylcJqOAwRWQ",
+    "sheet": "Carteira_Planejador",
+    "startRow": 6,
+    "keyCol": "E",
+    "map": [
+      { "from": "TRABALHO", "to": "E" },
+      { "from": "PROJETO_INVESTIMENTO", "to": "K" },
+      { "from": "NUM_SOB", "to": "BL" },
+      { "from": "MUNICIPIO", "to": "I" },
+      { "from": "ENDERECO", "to": "J" },
+      { "from": "VR_MAO_DE_OBRA", "to": "AJ" },
+      { "from": "TOTAL_MT", "to": "Y" },
+      { "from": "TOTAL_BT", "to": "X" },
+      { "from": "QTDE_TRAFOS", "to": "W" },
+      { "from": "QTDE_POSTES", "to": "Q" },
+      { "from": "DATA_ACEITE", "to": "AV" },
+      { "from": "CLIENTE", "to": "L" },
+      { "from": "VALOR_A_PAGAR", "to": "BN" },
+      { "from": "INSPETOR", "to": "AG" },
+      { "from": "DATA_DESPACHO", "to": "AW" },
+      { "from": "LATITUDE", "to": "AZ" },
+      { "from": "LONGITUDE", "to": "BA" },
+      { "from": "PRAZO_EXECUCAO", "to": "AX" }
+    ],
+    "stampCol": "BB",
+    "stampSuffix": " - Entrada na Carteira-Planejador",
+    "cityCol": "BI",
+    "cityValue": "JUAZEIRO DO NORTE",
+    "_minRows": "Guarda: se a ultima Tecnica tiver menos linhas que isso, pula a etapa (falha o run) sem tocar na carteira.",
+    "minRows": 1
+  }
 }
